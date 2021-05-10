@@ -25,10 +25,6 @@ func (m ParseMessage) IsDMLQuery() bool {
 		strings.Contains(strings.ToLower(m.Query), "delete")
 }
 
-func (m ParseMessage) IsBeginTxn() bool {
-	return strings.ToLower(m.Query) == "begin"
-}
-
 func DecodeParseMessage(pgPacketData []byte, parseMessage *ParseMessage) (lastIndex int) {
 	var lengthData = []byte{pgPacketData[1], pgPacketData[2], pgPacketData[3], pgPacketData[4]}
 	messageLength := binary.BigEndian.Uint32(lengthData)

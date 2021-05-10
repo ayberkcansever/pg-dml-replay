@@ -2,24 +2,32 @@ package main
 
 import (
 	"com.canseverayberk/pg-dml-replay/protocol"
-	"fmt"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 	"log"
+	"os"
 )
 
 func main() {
 	preparedStatementMap := make(map[string]protocol.ParseMessage)
 
+	argsWithProg := os.Args
+
 	var (
-		iface = "lo0"
+		iface  = "eth0"
 		buffer = int32(16448)
-		filter = "tcp and port 6432"
+		filter = "tcp and port 5000"
 	)
+
+	if len(argsWithProg) > 1 {
+		iface = argsWithProg[1]
+		filter = argsWithProg[2]
+	}
 
 	if !deviceExists(iface) {
 		log.Fatal("Unable to open device ", iface)
 	}
+	log.Println("Device opened: ", iface, filter)
 
 	handler, err := pcap.OpenLive(iface, buffer, false, pcap.BlockForever)
 	if err != nil {
@@ -52,12 +60,10 @@ func deviceExists(name string) bool {
 }
 
 func processPacket(packet gopacket.Packet, preparedStatementMap map[string]protocol.ParseMessage) {
-	fullPacketData := packet.Data()
-	if len(fullPacketData) <= 56 {
+	pgPacketData := packet.TransportLayer().LayerPayload()
+	if len(pgPacketData) == 0 {
 		return
 	}
-
-	pgPacketData := fullPacketData[56:]
 
 	lastIndex := 0
 	for {
@@ -68,35 +74,35 @@ func processPacket(packet gopacket.Packet, preparedStatementMap map[string]proto
 			msgLastIndex := protocol.DecodeParseMessage(messageData, &parseMessage)
 			if parseMessage.IsDMLQuery() && parseMessage.Statement != "" {
 				preparedStatementMap[parseMessage.Statement] = parseMessage
-				fmt.Println("Statement saved -> ")
+				log.Println("Statement saved -> ")
 			}
 			lastIndex += msgLastIndex
-			fmt.Println("Parse: " + parseMessage.String())
+			log.Println("Parse: " + parseMessage.String())
 		} else if messageType == protocol.BIND {
 			var bindMessage protocol.BindMessage
 			messageLastIndex := protocol.DecodeBindMessage(messageData, &bindMessage)
 			if bindMessage.IsPreparedStatement() {
 				if parseMessage, ok := preparedStatementMap[bindMessage.Statement]; ok {
-					fmt.Println("Query Bind: " + parseMessage.Query)
+					log.Println("Query Bind: " + parseMessage.Query)
 				}
 			}
 			lastIndex += messageLastIndex
-			fmt.Println("Bind: " + bindMessage.String())
+			log.Println("Bind: " + bindMessage.String())
 		} else if messageType == protocol.DESCRIBE {
 			var describeMessage protocol.DescribeMessage
 			messageLastIndex := protocol.DecodeDescribeMessage(messageData, &describeMessage)
 			lastIndex += messageLastIndex
-			fmt.Println("Describe: " + describeMessage.String())
+			log.Println("Describe: " + describeMessage.String())
 		} else if messageType == protocol.EXECUTE {
 			var executeMessage protocol.ExecuteMessage
 			messageLastIndex := protocol.DecodeExecuteMessage(messageData, &executeMessage)
 			lastIndex += messageLastIndex
-			fmt.Println("Execute: " + executeMessage.String())
+			log.Println("Execute: " + executeMessage.String())
 		} else if messageType == protocol.SYNC {
 			var syncMessage protocol.SyncMessage
 			messageLastIndex := protocol.DecodeSyncMessage(messageData, &syncMessage)
 			lastIndex += messageLastIndex
-			fmt.Println("Sync: " + syncMessage.String())
+			log.Println("Sync: " + syncMessage.String())
 		} else {
 			break
 		}
