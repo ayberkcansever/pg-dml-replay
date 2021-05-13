@@ -6,16 +6,13 @@ import (
 )
 
 type BindMessage struct {
-	Type                   byte
-	Length                 int32
-	Portal                 string
-	Statement              string
-	ParameterFormatsLength int16
-	ParameterFormats       []int16
-	ParameterValuesLength  int16
-	ParameterValues        [][]byte
-	ResultFormats          int16
-	ResultFormatValues     []int16
+	Type               byte
+	Length             int32
+	Portal             string
+	Statement          string
+	ParameterFormats   []int16
+	ParameterValues    [][]byte
+	ResultFormatValues []int16
 }
 
 func (m BindMessage) IsPreparedStatement() bool {
@@ -48,15 +45,12 @@ func DecodeBindMessage(pgPacketData []byte, bindMessage *BindMessage) (lastIndex
 	resultFormatsLength, resultFormatsLengthEndIndex := ReadInt16(pgPacketData, parameterValuesIndex)
 	resultFormats, resultFormatsIndex := ReadInt16Array(pgPacketData, resultFormatsLengthEndIndex, int(resultFormatsLength))
 
-	bindMessage.Type = 42
+	bindMessage.Type = BIND
 	bindMessage.Length = int32(messageLength)
 	bindMessage.Portal = string(portal)
 	bindMessage.Statement = string(statement)
-	bindMessage.ParameterFormatsLength = int16(parameterFormatsLength)
 	bindMessage.ParameterFormats = parameterFormats
-	bindMessage.ParameterValuesLength = int16(parameterValuesLength)
 	bindMessage.ParameterValues = parameterValues
-	bindMessage.ResultFormats = int16(resultFormatsLength)
 	bindMessage.ResultFormatValues = resultFormats
 
 	return resultFormatsIndex

@@ -1,6 +1,8 @@
 package protocol
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+)
 
 func GetMessageLength(packetData []byte) int {
 	var lengthData = []byte{packetData[1], packetData[2], packetData[3], packetData[4]}

@@ -5,10 +5,10 @@ import (
 )
 
 type DescribeMessage struct {
-	Type         byte
-	Length       int32
-	DescribeType string
-	Statement    string
+	Type      byte
+	Length    int32
+	Portal    string
+	Statement string
 }
 
 func DecodeDescribeMessage(pgPacketData []byte, describeMessage *DescribeMessage) (lastIndex int) {
@@ -28,9 +28,9 @@ func DecodeDescribeMessage(pgPacketData []byte, describeMessage *DescribeMessage
 	}
 	statement := string(pgPacketData[statementStartIndex : statementEndIndex-1])
 
-	describeMessage.Type = 44
+	describeMessage.Type = DESCRIBE
 	describeMessage.Length = int32(messageLength)
-	describeMessage.DescribeType = describeType
+	describeMessage.Portal = describeType
 	describeMessage.Statement = statement
 
 	return statementEndIndex

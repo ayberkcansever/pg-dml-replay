@@ -32,7 +32,7 @@ func DecodeExecuteMessage(pgPacketData []byte, executeMessage *ExecuteMessage) (
 		pgPacketData[portalEndIndex+2],
 		pgPacketData[portalEndIndex+3]})
 
-	executeMessage.Type = 45
+	executeMessage.Type = EXECUTE
 	executeMessage.Length = int32(messageLength)
 	executeMessage.Portal = portal
 	executeMessage.RowCountToReturn = int32(rowCountToReturn)
