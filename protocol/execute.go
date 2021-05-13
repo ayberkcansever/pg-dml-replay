@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"fmt"
 )
 
 type ExecuteMessage struct {
@@ -10,10 +9,6 @@ type ExecuteMessage struct {
 	Length           int32
 	Portal           string
 	RowCountToReturn int32
-}
-
-func (m ExecuteMessage) String() string {
-	return fmt.Sprintf("[%b, %d, %s, %d]", int32(m.Type), m.Length, m.Portal, m.RowCountToReturn)
 }
 
 func DecodeExecuteMessage(pgPacketData []byte, executeMessage *ExecuteMessage) (lastIndex int) {

@@ -3,7 +3,6 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 )
 
 type BindMessage struct {
@@ -17,12 +16,6 @@ type BindMessage struct {
 	ParameterValues        [][]byte
 	ResultFormats          int16
 	ResultFormatValues     []int16
-}
-
-func (m BindMessage) String() string {
-	return fmt.Sprintf("[%b, %d, %s, %s, %d, %b, %d, %s, %d]",
-		int32(m.Type), m.Length, m.Portal, m.Statement, m.ParameterFormatsLength, m.ParameterFormats,
-		m.ParameterValuesLength, m.ParameterValues, m.ResultFormats)
 }
 
 func (m BindMessage) IsPreparedStatement() bool {

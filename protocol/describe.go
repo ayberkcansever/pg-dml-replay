@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"fmt"
 )
 
 type DescribeMessage struct {
@@ -10,10 +9,6 @@ type DescribeMessage struct {
 	Length       int32
 	DescribeType string
 	Statement    string
-}
-
-func (m DescribeMessage) String() string {
-	return fmt.Sprintf("[%b, %d, %s]", int32(m.Type), m.Length, m.Statement)
 }
 
 func DecodeDescribeMessage(pgPacketData []byte, describeMessage *DescribeMessage) (lastIndex int) {

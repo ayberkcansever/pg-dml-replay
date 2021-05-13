@@ -12,9 +12,10 @@ import (
 )
 
 var (
-	iface  = "eth0"
-	buffer = int32(32896)
-	filter = "tcp and dst port 5000"
+	iface       = "eth0"
+	buffer      = int32(32896)
+	filter      = "tcp and dst port 5000"
+	kafkaBroker = "localhost:9092"
 )
 var preparedStatementMap map[string]protocol.ParseMessage
 var kafkaProducer *kafka.Producer
@@ -37,11 +38,12 @@ func init() {
 	if len(argsWithProg) > 1 {
 		iface = argsWithProg[1]
 		filter = argsWithProg[2]
+		kafkaBroker = argsWithProg[3]
 	}
 
 	tcpPacketChannel = make(chan gopacket.Packet)
 	preparedStatementMap = make(map[string]protocol.ParseMessage)
-	kafkaProducer, _ = kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost:9092"})
+	kafkaProducer, _ = kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": kafkaBroker})
 	dmlKafKaMessageChannel = make(chan DmlQuery)
 
 	go startProcessingTcpPacket()

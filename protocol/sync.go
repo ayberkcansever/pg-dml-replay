@@ -2,16 +2,11 @@ package protocol
 
 import (
 	"encoding/binary"
-	"fmt"
 )
 
 type SyncMessage struct {
 	Type   byte
 	Length int32
-}
-
-func (m SyncMessage) String() string {
-	return fmt.Sprintf("[%b, %d]", int32(m.Type), m.Length)
 }
 
 func DecodeSyncMessage(pgPacketData []byte, syncMessage *SyncMessage) (lastIndex int) {

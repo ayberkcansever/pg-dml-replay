@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"fmt"
 	"strings"
 )
 
@@ -14,15 +13,10 @@ type ParseMessage struct {
 	ParameterTypes []int32
 }
 
-func (m ParseMessage) String() string {
-	return fmt.Sprintf("[%b, %d, %s, %s, %b]",
-		int32(m.Type), m.Length, m.Statement, m.Query, m.ParameterTypes)
-}
-
 func (m ParseMessage) IsDMLQuery() bool {
-	return strings.Contains(strings.ToLower(m.Query), "insert") ||
-		strings.Contains(strings.ToLower(m.Query), "update") ||
-		strings.Contains(strings.ToLower(m.Query), "delete")
+	return strings.HasPrefix(strings.ToLower(m.Query), "insert") ||
+		strings.HasPrefix(strings.ToLower(m.Query), "update") ||
+		strings.HasPrefix(strings.ToLower(m.Query), "delete")
 }
 
 func DecodeParseMessage(pgPacketData []byte, parseMessage *ParseMessage) (lastIndex int) {
