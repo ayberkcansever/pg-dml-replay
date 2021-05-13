@@ -3,31 +3,52 @@ package main
 import (
 	"com.canseverayberk/pg-dml-replay/protocol"
 	"encoding/binary"
-	"fmt"
+	"encoding/json"
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 	"log"
 	"os"
 )
 
+var (
+	iface  = "eth0"
+	buffer = int32(32896)
+	filter = "tcp and dst port 5000"
+)
 var preparedStatementMap map[string]protocol.ParseMessage
+var kafkaProducer *kafka.Producer
+var tcpPacketChannel chan gopacket.Packet
+var dmlKafKaMessageChannel chan DmlQuery
+var dmlKafkaTopic = "pg-dml-test"
 
-func main() {
-	preparedStatementMap = make(map[string]protocol.ParseMessage)
+type DmlQuery struct {
+	Query      string           `json:"query"`
+	Parameters []QueryParameter `json:"parameters"`
+}
 
+type QueryParameter struct {
+	Type  int    `json:"type"`
+	Value []byte `json:"value"`
+}
+
+func init() {
 	argsWithProg := os.Args
-
-	var (
-		iface  = "eth0"
-		buffer = int32(32896)
-		filter = "tcp and dst port 5000"
-	)
-
 	if len(argsWithProg) > 1 {
 		iface = argsWithProg[1]
 		filter = argsWithProg[2]
 	}
 
+	tcpPacketChannel = make(chan gopacket.Packet)
+	preparedStatementMap = make(map[string]protocol.ParseMessage)
+	kafkaProducer, _ = kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost:9092"})
+	dmlKafKaMessageChannel = make(chan DmlQuery)
+
+	go startProcessingTcpPacket()
+	go startInforming()
+}
+
+func main() {
 	if !deviceExists(iface) {
 		log.Fatal("Unable to open device ", iface)
 	}
@@ -46,13 +67,10 @@ func main() {
 	source := gopacket.NewPacketSource(handler, handler.LinkType())
 	source.DecodeStreamsAsDatagrams = true
 
-	packetChannel := make(chan gopacket.Packet)
-	go processPacket(packetChannel)
-
 	for packet := range source.Packets() {
 		pgPacketData := packet.TransportLayer().LayerPayload()
 		if len(pgPacketData) > 0 {
-			packetChannel <- packet
+			tcpPacketChannel <- packet
 		}
 	}
 
@@ -71,14 +89,14 @@ func deviceExists(name string) bool {
 	return false
 }
 
-func reassembly(packetChannel chan gopacket.Packet) []byte {
-	packet := <-packetChannel
+func reassembly() []byte {
+	packet := <-tcpPacketChannel
 	pgPacketData := packet.TransportLayer().LayerPayload()
 	return pgPacketData
 }
 
-func processPacket(packetChannel chan gopacket.Packet) {
-	packet := <-packetChannel
+func startProcessingTcpPacket() {
+	packet := <-tcpPacketChannel
 	pgPacketData := packet.TransportLayer().LayerPayload()
 
 	messageType := pgPacketData[0]
@@ -86,9 +104,7 @@ func processPacket(packetChannel chan gopacket.Packet) {
 		var fullPacketData = make([]byte, 0)
 		lengthData := []byte{pgPacketData[1], pgPacketData[2], pgPacketData[3], pgPacketData[4]}
 		messageLength := int(binary.BigEndian.Uint32(lengthData))
-		if messageLength > 1000000 {
-			fmt.Print(messageLength)
-		}
+
 		if len(pgPacketData) > messageLength {
 			fullPacketData = append(fullPacketData, pgPacketData[0:(messageLength+1)]...)
 			successivePacketData := pgPacketData[(messageLength + 1):]
@@ -114,7 +130,7 @@ func processPacket(packetChannel chan gopacket.Packet) {
 		}
 		for {
 			if len(fullPacketData) <= messageLength {
-				newPacketData := reassembly(packetChannel)
+				newPacketData := reassembly()
 				fullPacketData = append(fullPacketData, newPacketData...)
 			} else {
 				break
@@ -122,55 +138,92 @@ func processPacket(packetChannel chan gopacket.Packet) {
 		}
 
 		lastIndex := 0
+		var query string
+		var queryParameters []QueryParameter
 		for {
 			messageData := fullPacketData[lastIndex:]
-			messageType := messageData[0]
+			messageType = messageData[0]
 
 			if messageType == protocol.PARSE {
 				var parseMessage protocol.ParseMessage
 				msgLastIndex := protocol.DecodeParseMessage(messageData, &parseMessage)
 				if parseMessage.IsDMLQuery() && parseMessage.Statement != "" {
 					preparedStatementMap[parseMessage.Statement] = parseMessage
-					log.Println("Statement saved -> ")
 				}
 				lastIndex += msgLastIndex
-				log.Println("Parse: " + parseMessage.String())
+				if parseMessage.Query != "" && parseMessage.IsDMLQuery() {
+					query = parseMessage.Query
+				}
 			} else if messageType == protocol.BIND {
 				var bindMessage protocol.BindMessage
 				messageLastIndex := protocol.DecodeBindMessage(messageData, &bindMessage)
 				if bindMessage.IsPreparedStatement() {
 					if parseMessage, ok := preparedStatementMap[bindMessage.Statement]; ok {
-						log.Println("Query Bind: " + parseMessage.Query)
+						query = parseMessage.Query
 					}
 				}
 				lastIndex += messageLastIndex
-				log.Println("Bind: " + bindMessage.String())
+
+				if query != "" {
+					queryParameters = make([]QueryParameter, len(bindMessage.ParameterValues))
+					for i, param := range bindMessage.ParameterValues {
+						var queryParameter QueryParameter
+						if bindMessage.ParameterFormats[i] == 0 {
+							queryParameter.Type = 0
+						} else {
+							queryParameter.Type = 1
+						}
+						queryParameter.Value = param
+						queryParameters[i] = queryParameter
+					}
+				}
 			} else if messageType == protocol.DESCRIBE {
 				var describeMessage protocol.DescribeMessage
 				messageLastIndex := protocol.DecodeDescribeMessage(messageData, &describeMessage)
 				lastIndex += messageLastIndex
-				log.Println("Describe: " + describeMessage.String())
 			} else if messageType == protocol.EXECUTE {
 				var executeMessage protocol.ExecuteMessage
 				messageLastIndex := protocol.DecodeExecuteMessage(messageData, &executeMessage)
 				lastIndex += messageLastIndex
-				log.Println("Execute: " + executeMessage.String())
 			} else if messageType == protocol.SYNC {
 				var syncMessage protocol.SyncMessage
 				messageLastIndex := protocol.DecodeSyncMessage(messageData, &syncMessage)
 				lastIndex += messageLastIndex
-				log.Println("Sync: " + syncMessage.String())
 			} else {
 				break
 			}
 
 			if lastIndex >= len(fullPacketData) {
+				if query != "" {
+					dmlKafKaMessageChannel <- DmlQuery{
+						Query:      query,
+						Parameters: queryParameters,
+					}
+				}
 				break
 			}
 		}
 	}
 
-	go processPacket(packetChannel)
+	go startProcessingTcpPacket()
+}
+
+func startInforming() {
+	for dmlQuery := range dmlKafKaMessageChannel {
+		log.Println("Producing dml query: ", dmlQuery.Query)
+		dmlJson, err := json.Marshal(dmlQuery)
+		if err != nil {
+			log.Println(err)
+		} else {
+			err = kafkaProducer.Produce(&kafka.Message{
+				TopicPartition: kafka.TopicPartition{Topic: &dmlKafkaTopic},
+				Value:          dmlJson,
+			}, nil)
+			if err != nil {
+				log.Println(err)
+			}
+		}
+	}
 }
 
 /*func getInsertHex() []byte {
