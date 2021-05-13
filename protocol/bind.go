@@ -30,45 +30,12 @@ func (m BindMessage) IsPreparedStatement() bool {
 }
 
 func DecodeBindMessage(pgPacketData []byte, bindMessage *BindMessage) (lastIndex int) {
-	var lengthData = []byte{pgPacketData[1], pgPacketData[2], pgPacketData[3], pgPacketData[4]}
-	messageLength := binary.BigEndian.Uint32(lengthData)
-
-	portalStartIndex := 5
-	portalEndIndex := portalStartIndex
-	for {
-		if pgPacketData[portalEndIndex] == 0 {
-			portalEndIndex++
-			break
-		}
-		portalEndIndex++
-	}
-	portal := string(pgPacketData[portalStartIndex : portalEndIndex-1])
-
-	statementStartIndex := portalEndIndex
-	statementEndIndex := statementStartIndex
-	for {
-		if pgPacketData[statementEndIndex] == 0 {
-			statementEndIndex++
-			break
-		}
-		statementEndIndex++
-	}
-	statement := string(pgPacketData[statementStartIndex : statementEndIndex-1])
-
-	parameterFormatsLengthStartIndex := statementEndIndex
-	parameterFormatsLengthEndIndex := parameterFormatsLengthStartIndex + 2
-	parameterFormatsLength := binary.BigEndian.Uint16(pgPacketData[parameterFormatsLengthStartIndex:parameterFormatsLengthEndIndex])
-
-	parameterFormatsIndex := parameterFormatsLengthEndIndex
-	parameterFormats := make([]int16, parameterFormatsLength)
-	for i := 0; i < int(parameterFormatsLength); i++ {
-		parameterFormats[i] = int16(binary.BigEndian.Uint16(pgPacketData[parameterFormatsIndex : parameterFormatsIndex+2]))
-		parameterFormatsIndex = parameterFormatsIndex + 2
-	}
-
-	parameterValuesLengthStartIndex := parameterFormatsIndex
-	parameterValuesLengthEndIndex := parameterValuesLengthStartIndex + 2
-	parameterValuesLength := binary.BigEndian.Uint16(pgPacketData[parameterValuesLengthStartIndex:parameterValuesLengthEndIndex])
+	messageLength := GetMessageLength(pgPacketData)
+	portal, portalEndIndex := ReadUntil(pgPacketData, 5)
+	statement, statementEndIndex := ReadUntil(pgPacketData, portalEndIndex)
+	parameterFormatsLength, parameterFormatsLengthEndIndex := ReadInt16(pgPacketData, statementEndIndex)
+	parameterFormats, parameterFormatsEndIndex := ReadInt16Array(pgPacketData, parameterFormatsLengthEndIndex, int(parameterFormatsLength))
+	parameterValuesLength, parameterValuesLengthEndIndex := ReadInt16(pgPacketData, parameterFormatsEndIndex)
 
 	parameterValuesIndex := parameterValuesLengthEndIndex
 	parameterValues := make([][]byte, parameterValuesLength)
@@ -85,21 +52,13 @@ func DecodeBindMessage(pgPacketData []byte, bindMessage *BindMessage) (lastIndex
 		parameterValuesIndex = parameterValueEndIndex
 	}
 
-	resultFormatsLengthStartIndex := parameterValuesIndex
-	resultFormatsLengthEndIndex := resultFormatsLengthStartIndex + 2
-	resultFormatsLength := binary.BigEndian.Uint16(pgPacketData[resultFormatsLengthStartIndex:resultFormatsLengthEndIndex])
-
-	resultFormatsIndex := resultFormatsLengthEndIndex
-	resultFormats := make([]int16, resultFormatsLength)
-	for i := 0; i < int(resultFormatsLength); i++ {
-		resultFormats[i] = int16(binary.BigEndian.Uint16(pgPacketData[resultFormatsIndex : resultFormatsIndex+2]))
-		resultFormatsIndex = resultFormatsIndex + 2
-	}
+	resultFormatsLength, resultFormatsLengthEndIndex := ReadInt16(pgPacketData, parameterValuesIndex)
+	resultFormats, resultFormatsIndex := ReadInt16Array(pgPacketData, resultFormatsLengthEndIndex, int(resultFormatsLength))
 
 	bindMessage.Type = 42
 	bindMessage.Length = int32(messageLength)
-	bindMessage.Portal = portal
-	bindMessage.Statement = statement
+	bindMessage.Portal = string(portal)
+	bindMessage.Statement = string(statement)
 	bindMessage.ParameterFormatsLength = int16(parameterFormatsLength)
 	bindMessage.ParameterFormats = parameterFormats
 	bindMessage.ParameterValuesLength = int16(parameterValuesLength)

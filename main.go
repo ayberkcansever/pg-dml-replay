@@ -2,21 +2,25 @@ package main
 
 import (
 	"com.canseverayberk/pg-dml-replay/protocol"
+	"encoding/binary"
+	"fmt"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 	"log"
 	"os"
 )
 
+var preparedStatementMap map[string]protocol.ParseMessage
+
 func main() {
-	preparedStatementMap := make(map[string]protocol.ParseMessage)
+	preparedStatementMap = make(map[string]protocol.ParseMessage)
 
 	argsWithProg := os.Args
 
 	var (
 		iface  = "eth0"
-		buffer = int32(16448)
-		filter = "tcp and port 5000"
+		buffer = int32(32896)
+		filter = "tcp and dst port 5000"
 	)
 
 	if len(argsWithProg) > 1 {
@@ -40,8 +44,16 @@ func main() {
 	}
 
 	source := gopacket.NewPacketSource(handler, handler.LinkType())
+	source.DecodeStreamsAsDatagrams = true
+
+	packetChannel := make(chan gopacket.Packet)
+	go processPacket(packetChannel)
+
 	for packet := range source.Packets() {
-		processPacket(packet, preparedStatementMap)
+		pgPacketData := packet.TransportLayer().LayerPayload()
+		if len(pgPacketData) > 0 {
+			packetChannel <- packet
+		}
 	}
 
 }
@@ -59,58 +71,106 @@ func deviceExists(name string) bool {
 	return false
 }
 
-func processPacket(packet gopacket.Packet, preparedStatementMap map[string]protocol.ParseMessage) {
+func reassembly(packetChannel chan gopacket.Packet) []byte {
+	packet := <-packetChannel
 	pgPacketData := packet.TransportLayer().LayerPayload()
-	if len(pgPacketData) == 0 {
-		return
-	}
+	return pgPacketData
+}
 
-	lastIndex := 0
-	for {
-		messageData := pgPacketData[lastIndex:]
-		messageType := messageData[0]
-		if messageType == protocol.PARSE {
-			var parseMessage protocol.ParseMessage
-			msgLastIndex := protocol.DecodeParseMessage(messageData, &parseMessage)
-			if parseMessage.IsDMLQuery() && parseMessage.Statement != "" {
-				preparedStatementMap[parseMessage.Statement] = parseMessage
-				log.Println("Statement saved -> ")
-			}
-			lastIndex += msgLastIndex
-			log.Println("Parse: " + parseMessage.String())
-		} else if messageType == protocol.BIND {
-			var bindMessage protocol.BindMessage
-			messageLastIndex := protocol.DecodeBindMessage(messageData, &bindMessage)
-			if bindMessage.IsPreparedStatement() {
-				if parseMessage, ok := preparedStatementMap[bindMessage.Statement]; ok {
-					log.Println("Query Bind: " + parseMessage.Query)
+func processPacket(packetChannel chan gopacket.Packet) {
+	packet := <-packetChannel
+	pgPacketData := packet.TransportLayer().LayerPayload()
+
+	messageType := pgPacketData[0]
+	if protocol.IsKnownMessage(messageType) {
+		var fullPacketData = make([]byte, 0)
+		lengthData := []byte{pgPacketData[1], pgPacketData[2], pgPacketData[3], pgPacketData[4]}
+		messageLength := int(binary.BigEndian.Uint32(lengthData))
+		if messageLength > 1000000 {
+			fmt.Print(messageLength)
+		}
+		if len(pgPacketData) > messageLength {
+			fullPacketData = append(fullPacketData, pgPacketData[0:(messageLength+1)]...)
+			successivePacketData := pgPacketData[(messageLength + 1):]
+			for {
+				if len(successivePacketData) == 0 {
+					break
+				}
+
+				lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
+				messageLength = int(binary.BigEndian.Uint32(lengthData))
+				if len(successivePacketData) > messageLength {
+					fullPacketData = append(fullPacketData, successivePacketData[0:(messageLength+1)]...)
+					successivePacketData = pgPacketData[len(fullPacketData):]
+				}
+				if messageLength > len(pgPacketData) {
+					fullPacketData = make([]byte, 0)
+					break
 				}
 			}
-			lastIndex += messageLastIndex
-			log.Println("Bind: " + bindMessage.String())
-		} else if messageType == protocol.DESCRIBE {
-			var describeMessage protocol.DescribeMessage
-			messageLastIndex := protocol.DecodeDescribeMessage(messageData, &describeMessage)
-			lastIndex += messageLastIndex
-			log.Println("Describe: " + describeMessage.String())
-		} else if messageType == protocol.EXECUTE {
-			var executeMessage protocol.ExecuteMessage
-			messageLastIndex := protocol.DecodeExecuteMessage(messageData, &executeMessage)
-			lastIndex += messageLastIndex
-			log.Println("Execute: " + executeMessage.String())
-		} else if messageType == protocol.SYNC {
-			var syncMessage protocol.SyncMessage
-			messageLastIndex := protocol.DecodeSyncMessage(messageData, &syncMessage)
-			lastIndex += messageLastIndex
-			log.Println("Sync: " + syncMessage.String())
-		} else {
-			break
+		}
+		if len(pgPacketData) <= messageLength {
+			fullPacketData = append(fullPacketData, pgPacketData...)
+		}
+		for {
+			if len(fullPacketData) <= messageLength {
+				newPacketData := reassembly(packetChannel)
+				fullPacketData = append(fullPacketData, newPacketData...)
+			} else {
+				break
+			}
 		}
 
-		if lastIndex >= len(pgPacketData) {
-			break
+		lastIndex := 0
+		for {
+			messageData := fullPacketData[lastIndex:]
+			messageType := messageData[0]
+
+			if messageType == protocol.PARSE {
+				var parseMessage protocol.ParseMessage
+				msgLastIndex := protocol.DecodeParseMessage(messageData, &parseMessage)
+				if parseMessage.IsDMLQuery() && parseMessage.Statement != "" {
+					preparedStatementMap[parseMessage.Statement] = parseMessage
+					log.Println("Statement saved -> ")
+				}
+				lastIndex += msgLastIndex
+				log.Println("Parse: " + parseMessage.String())
+			} else if messageType == protocol.BIND {
+				var bindMessage protocol.BindMessage
+				messageLastIndex := protocol.DecodeBindMessage(messageData, &bindMessage)
+				if bindMessage.IsPreparedStatement() {
+					if parseMessage, ok := preparedStatementMap[bindMessage.Statement]; ok {
+						log.Println("Query Bind: " + parseMessage.Query)
+					}
+				}
+				lastIndex += messageLastIndex
+				log.Println("Bind: " + bindMessage.String())
+			} else if messageType == protocol.DESCRIBE {
+				var describeMessage protocol.DescribeMessage
+				messageLastIndex := protocol.DecodeDescribeMessage(messageData, &describeMessage)
+				lastIndex += messageLastIndex
+				log.Println("Describe: " + describeMessage.String())
+			} else if messageType == protocol.EXECUTE {
+				var executeMessage protocol.ExecuteMessage
+				messageLastIndex := protocol.DecodeExecuteMessage(messageData, &executeMessage)
+				lastIndex += messageLastIndex
+				log.Println("Execute: " + executeMessage.String())
+			} else if messageType == protocol.SYNC {
+				var syncMessage protocol.SyncMessage
+				messageLastIndex := protocol.DecodeSyncMessage(messageData, &syncMessage)
+				lastIndex += messageLastIndex
+				log.Println("Sync: " + syncMessage.String())
+			} else {
+				break
+			}
+
+			if lastIndex >= len(fullPacketData) {
+				break
+			}
 		}
 	}
+
+	go processPacket(packetChannel)
 }
 
 /*func getInsertHex() []byte {

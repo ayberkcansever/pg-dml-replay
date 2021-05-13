@@ -51,16 +51,20 @@ func DecodeParseMessage(pgPacketData []byte, parseMessage *ParseMessage) (lastIn
 
 	query := string(pgPacketData[queryStartIndex:queryEndIndex])
 
-	parameterLengthStartIndex := queryEndIndex + 1
+	/*parameterLengthStartIndex := queryEndIndex + 1
 	parameterLengthEndIndex := parameterLengthStartIndex + 2
-	parameterLength := binary.BigEndian.Uint16(pgPacketData[parameterLengthStartIndex:parameterLengthEndIndex])
+	parameterLength := binary.BigEndian.Uint16(pgPacketData[parameterLengthStartIndex:parameterLengthEndIndex])*/
 
-	parameterTypesIndex := parameterLengthEndIndex
-	parameterTypes := make([]int32, parameterLength)
-	for i := 0; i < int(parameterLength); i++ {
-		parameterTypes[i] = int32(binary.BigEndian.Uint32(pgPacketData[parameterTypesIndex : parameterTypesIndex+4]))
-		parameterTypesIndex = parameterTypesIndex + 4
-	}
+	parameterLength, parameterLengthEndIndex := ReadInt16(pgPacketData, queryEndIndex+1)
+
+	/*	parameterTypesIndex := parameterLengthEndIndex
+		parameterTypes := make([]int32, parameterLength)
+		for i := 0; i < int(parameterLength); i++ {
+			parameterTypes[i] = int32(binary.BigEndian.Uint32(pgPacketData[parameterTypesIndex : parameterTypesIndex+4]))
+			parameterTypesIndex = parameterTypesIndex + 4
+		}*/
+
+	parameterTypes, parameterTypesIndex := ReadInt32Array(pgPacketData, parameterLengthEndIndex, int(parameterLength))
 
 	parseMessage.Type = 50
 	parseMessage.Length = int32(messageLength)

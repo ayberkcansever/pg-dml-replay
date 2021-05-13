@@ -31,9 +31,13 @@ func DecodeExecuteMessage(pgPacketData []byte, executeMessage *ExecuteMessage) (
 	}
 	portal := string(pgPacketData[portalStartIndex : portalEndIndex-1])
 
-	var rowCountToReturn = binary.BigEndian.Uint32([]byte{pgPacketData[portalEndIndex], pgPacketData[portalEndIndex+1], pgPacketData[portalEndIndex+2], pgPacketData[portalEndIndex+3]})
+	var rowCountToReturn = binary.BigEndian.Uint32([]byte{
+		pgPacketData[portalEndIndex],
+		pgPacketData[portalEndIndex+1],
+		pgPacketData[portalEndIndex+2],
+		pgPacketData[portalEndIndex+3]})
 
-	executeMessage.Type = 44
+	executeMessage.Type = 45
 	executeMessage.Length = int32(messageLength)
 	executeMessage.Portal = portal
 	executeMessage.RowCountToReturn = int32(rowCountToReturn)

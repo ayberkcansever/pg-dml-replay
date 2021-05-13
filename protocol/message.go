@@ -7,3 +7,8 @@ const (
 	PARSE    = 80
 	SYNC     = 83
 )
+
+func IsKnownMessage(messageType byte) bool {
+	return messageType == BIND || messageType == DESCRIBE ||
+		messageType == EXECUTE || messageType == PARSE || messageType == SYNC
+}
