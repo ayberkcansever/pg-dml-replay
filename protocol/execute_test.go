@@ -1,8 +1,8 @@
 package protocol
 
 import (
+	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
-	"reflect"
 	"testing"
 )
 
@@ -22,9 +22,7 @@ func TestDecodeExecuteMessage(t *testing.T) {
 		Portal:           "",
 		RowCountToReturn: int32(0),
 	}
-	if !reflect.DeepEqual(expectedExecuteMessage, executeMessage) {
-		t.Errorf("expected %q, got %q", expectedExecuteMessage, executeMessage)
-	}
+	test.AssertEquals(t, expectedExecuteMessage, executeMessage)
 }
 
 func TestDecodeExecuteMessageReturns1Row(t *testing.T) {
@@ -43,7 +41,5 @@ func TestDecodeExecuteMessageReturns1Row(t *testing.T) {
 		Portal:           "",
 		RowCountToReturn: int32(1),
 	}
-	if !reflect.DeepEqual(expectedExecuteMessage, executeMessage) {
-		t.Errorf("expected %q, got %q", expectedExecuteMessage, executeMessage)
-	}
+	test.AssertEquals(t, expectedExecuteMessage, executeMessage)
 }

@@ -1,8 +1,8 @@
 package protocol
 
 import (
+	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
-	"reflect"
 	"testing"
 )
 
@@ -21,7 +21,5 @@ func TestDecodeDescribeMessage(t *testing.T) {
 		Length: int32(6),
 		Portal: "P",
 	}
-	if !reflect.DeepEqual(expectedDescribeMessage, describeMessage) {
-		t.Errorf("expected %q, got %q", expectedDescribeMessage, describeMessage)
-	}
+	test.AssertEquals(t, expectedDescribeMessage, describeMessage)
 }

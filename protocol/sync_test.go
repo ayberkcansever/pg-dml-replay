@@ -1,8 +1,8 @@
 package protocol
 
 import (
+	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
-	"reflect"
 	"testing"
 )
 
@@ -20,7 +20,5 @@ func TestDecodeSyncMessage(t *testing.T) {
 		Type:   SYNC,
 		Length: int32(4),
 	}
-	if !reflect.DeepEqual(expectedSyncMessage, syncMessage) {
-		t.Errorf("expected %q, got %q", expectedSyncMessage, syncMessage)
-	}
+	test.AssertEquals(t, expectedSyncMessage, syncMessage)
 }

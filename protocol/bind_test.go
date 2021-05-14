@@ -1,8 +1,8 @@
 package protocol
 
 import (
+	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
-	"reflect"
 	"testing"
 )
 
@@ -25,9 +25,7 @@ func TestDecodeBindMessage(t *testing.T) {
 		ParameterValues:    [][]byte{},
 		ResultFormatValues: []int16{},
 	}
-	if !reflect.DeepEqual(expectedBindMessage, bindMessage) {
-		t.Errorf("expected %q, got %q", expectedBindMessage, bindMessage)
-	}
+	test.AssertEquals(t, expectedBindMessage, bindMessage)
 }
 
 func TestDecodeBindMessageWithParameters1(t *testing.T) {
@@ -49,9 +47,7 @@ func TestDecodeBindMessageWithParameters1(t *testing.T) {
 		ParameterValues:    [][]byte{{0, 0, 0, 0, 0, 0, 17, 92}, {0, 0, 0, 6}},
 		ResultFormatValues: []int16{},
 	}
-	if !reflect.DeepEqual(expectedBindMessage, bindMessage) {
-		t.Errorf("expected %q, got %q", expectedBindMessage, bindMessage)
-	}
+	test.AssertEquals(t, expectedBindMessage, bindMessage)
 }
 
 func TestDecodeBindMessageWithParameters2(t *testing.T) {
@@ -79,7 +75,5 @@ func TestDecodeBindMessageWithParameters2(t *testing.T) {
 		},
 		ResultFormatValues: []int16{},
 	}
-	if !reflect.DeepEqual(expectedBindMessage, bindMessage) {
-		t.Errorf("expected %q, got %q", expectedBindMessage, bindMessage)
-	}
+	test.AssertEquals(t, expectedBindMessage, bindMessage)
 }

@@ -1,8 +1,8 @@
 package protocol
 
 import (
+	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
-	"reflect"
 	"testing"
 )
 
@@ -23,9 +23,7 @@ func TestDecodeParseMessageWithEmptyQuery(t *testing.T) {
 		Query:          "",
 		ParameterTypes: []int32{},
 	}
-	if !reflect.DeepEqual(expectedParseMessage, parseMessage) {
-		t.Errorf("expected %q, got %q", expectedParseMessage, parseMessage)
-	}
+	test.AssertEquals(t, expectedParseMessage, parseMessage)
 }
 
 func TestDecodeParseMessageWithBeginQuery(t *testing.T) {
@@ -45,9 +43,7 @@ func TestDecodeParseMessageWithBeginQuery(t *testing.T) {
 		Query:          "BEGIN",
 		ParameterTypes: []int32{},
 	}
-	if !reflect.DeepEqual(expectedParseMessage, parseMessage) {
-		t.Errorf("expected %q, got %q", expectedParseMessage, parseMessage)
-	}
+	test.AssertEquals(t, expectedParseMessage, parseMessage)
 }
 
 func TestDecodeParseMessageWithStatement(t *testing.T) {
@@ -67,9 +63,7 @@ func TestDecodeParseMessageWithStatement(t *testing.T) {
 		Query:          "",
 		ParameterTypes: []int32{},
 	}
-	if !reflect.DeepEqual(expectedParseMessage, parseMessage) {
-		t.Errorf("expected %q, got %q", expectedParseMessage, parseMessage)
-	}
+	test.AssertEquals(t, expectedParseMessage, parseMessage)
 }
 
 func TestDecodeParseMessageWithParameters(t *testing.T) {
@@ -89,7 +83,5 @@ func TestDecodeParseMessageWithParameters(t *testing.T) {
 		Query:          "UPDATE public.t1 SET b = $1 WHERE a = $2",
 		ParameterTypes: []int32{20, 23},
 	}
-	if !reflect.DeepEqual(expectedParseMessage, parseMessage) {
-		t.Errorf("expected %q, got %q", expectedParseMessage, parseMessage)
-	}
+	test.AssertEquals(t, expectedParseMessage, parseMessage)
 }
