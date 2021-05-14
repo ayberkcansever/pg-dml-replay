@@ -1,6 +1,7 @@
-package protocol
+package outgoing
 
 import (
+	"com.canseverayberk/pg-dml-replay/protocol"
 	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
 	"testing"
@@ -17,7 +18,7 @@ func TestDecodeExecuteMessage(t *testing.T) {
 
 	// then
 	expectedExecuteMessage := ExecuteMessage{
-		Type:             EXECUTE,
+		Type:             protocol.Execute,
 		Length:           int32(9),
 		Portal:           "",
 		RowCountToReturn: int32(0),
@@ -36,7 +37,7 @@ func TestDecodeExecuteMessageReturns1Row(t *testing.T) {
 
 	// then
 	expectedExecuteMessage := ExecuteMessage{
-		Type:             EXECUTE,
+		Type:             protocol.Execute,
 		Length:           int32(9),
 		Portal:           "",
 		RowCountToReturn: int32(1),

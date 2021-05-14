@@ -1,15 +1,26 @@
 package protocol
 
 const (
-	BIND             = 66
-	COMMAND_COMPLETE = 68
-	DESCRIBE         = 68
-	EXECUTE          = 69
-	PARSE            = 80
-	SYNC             = 83
+	BindComplete       = 49
+	ParseComplete      = 50
+	Bind               = 66
+	CommandComplete    = 67
+	Describe           = 68
+	Execute            = 69
+	EmptyQueryResponse = 73
+	Parse              = 80
+	Sync               = 83
+	ReadyForQuery      = 90
+	NoData             = 110
 )
 
 func IsKnownOutgoingMessage(messageType byte) bool {
-	return messageType == BIND || messageType == DESCRIBE ||
-		messageType == EXECUTE || messageType == PARSE || messageType == SYNC
+	return messageType == Bind || messageType == Describe ||
+		messageType == Execute || messageType == Parse || messageType == Sync
+}
+
+func IsKnownIncomingMessage(messageType byte) bool {
+	return messageType == BindComplete || messageType == ParseComplete ||
+		messageType == CommandComplete || messageType == NoData ||
+		messageType == EmptyQueryResponse || messageType == ReadyForQuery
 }

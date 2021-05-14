@@ -1,6 +1,7 @@
-package protocol
+package outgoing
 
 import (
+	"com.canseverayberk/pg-dml-replay/protocol"
 	"encoding/binary"
 	"strings"
 )
@@ -45,10 +46,10 @@ func DecodeParseMessage(pgPacketData []byte, parseMessage *ParseMessage) (lastIn
 
 	query := string(pgPacketData[queryStartIndex:queryEndIndex])
 
-	parameterLength, parameterLengthEndIndex := ReadInt16(pgPacketData, queryEndIndex+1)
-	parameterTypes, parameterTypesIndex := ReadInt32Array(pgPacketData, parameterLengthEndIndex, int(parameterLength))
+	parameterLength, parameterLengthEndIndex := protocol.ReadInt16(pgPacketData, queryEndIndex+1)
+	parameterTypes, parameterTypesIndex := protocol.ReadInt32Array(pgPacketData, parameterLengthEndIndex, int(parameterLength))
 
-	parseMessage.Type = PARSE
+	parseMessage.Type = protocol.Parse
 	parseMessage.Length = int32(messageLength)
 	parseMessage.Statement = statement
 	parseMessage.Query = query

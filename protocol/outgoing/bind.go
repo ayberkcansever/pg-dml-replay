@@ -1,7 +1,8 @@
-package protocol
+package outgoing
 
 import (
 	"bytes"
+	"com.canseverayberk/pg-dml-replay/protocol"
 	"encoding/binary"
 )
 
@@ -20,12 +21,12 @@ func (m BindMessage) IsPreparedStatement() bool {
 }
 
 func DecodeBindMessage(pgPacketData []byte, bindMessage *BindMessage) (lastIndex int) {
-	messageLength := GetMessageLength(pgPacketData)
-	portal, portalEndIndex := ReadUntil(pgPacketData, 5)
-	statement, statementEndIndex := ReadUntil(pgPacketData, portalEndIndex)
-	parameterFormatsLength, parameterFormatsLengthEndIndex := ReadInt16(pgPacketData, statementEndIndex)
-	parameterFormats, parameterFormatsEndIndex := ReadInt16Array(pgPacketData, parameterFormatsLengthEndIndex, int(parameterFormatsLength))
-	parameterValuesLength, parameterValuesLengthEndIndex := ReadInt16(pgPacketData, parameterFormatsEndIndex)
+	messageLength := protocol.GetMessageLength(pgPacketData)
+	portal, portalEndIndex := protocol.ReadUntil(pgPacketData, 5)
+	statement, statementEndIndex := protocol.ReadUntil(pgPacketData, portalEndIndex)
+	parameterFormatsLength, parameterFormatsLengthEndIndex := protocol.ReadInt16(pgPacketData, statementEndIndex)
+	parameterFormats, parameterFormatsEndIndex := protocol.ReadInt16Array(pgPacketData, parameterFormatsLengthEndIndex, int(parameterFormatsLength))
+	parameterValuesLength, parameterValuesLengthEndIndex := protocol.ReadInt16(pgPacketData, parameterFormatsEndIndex)
 
 	parameterValuesIndex := parameterValuesLengthEndIndex
 	parameterValues := make([][]byte, parameterValuesLength)
@@ -42,10 +43,10 @@ func DecodeBindMessage(pgPacketData []byte, bindMessage *BindMessage) (lastIndex
 		parameterValuesIndex = parameterValueEndIndex
 	}
 
-	resultFormatsLength, resultFormatsLengthEndIndex := ReadInt16(pgPacketData, parameterValuesIndex)
-	resultFormats, resultFormatsIndex := ReadInt16Array(pgPacketData, resultFormatsLengthEndIndex, int(resultFormatsLength))
+	resultFormatsLength, resultFormatsLengthEndIndex := protocol.ReadInt16(pgPacketData, parameterValuesIndex)
+	resultFormats, resultFormatsIndex := protocol.ReadInt16Array(pgPacketData, resultFormatsLengthEndIndex, int(resultFormatsLength))
 
-	bindMessage.Type = BIND
+	bindMessage.Type = protocol.Bind
 	bindMessage.Length = int32(messageLength)
 	bindMessage.Portal = string(portal)
 	bindMessage.Statement = string(statement)

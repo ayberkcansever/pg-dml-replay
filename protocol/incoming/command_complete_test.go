@@ -1,6 +1,7 @@
-package protocol
+package incoming
 
 import (
+	"com.canseverayberk/pg-dml-replay/protocol"
 	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
 	"testing"
@@ -17,7 +18,7 @@ func TestDecodeCommandCompleteMessageForInsert(t *testing.T) {
 
 	// then
 	expectedCommandCompleteMessage := CommandCompleteMessage{
-		Type:   COMMAND_COMPLETE,
+		Type:   protocol.CommandComplete,
 		Length: int32(15),
 		Tag:    "INSERT 0 1",
 	}
@@ -35,7 +36,7 @@ func TestDecodeCommandCompleteMessageForUpdate(t *testing.T) {
 
 	// then
 	expectedCommandCompleteMessage := CommandCompleteMessage{
-		Type:   COMMAND_COMPLETE,
+		Type:   protocol.CommandComplete,
 		Length: int32(13),
 		Tag:    "UPDATE 1",
 	}
@@ -53,9 +54,27 @@ func TestDecodeCommandCompleteMessageForDelete(t *testing.T) {
 
 	// then
 	expectedCommandCompleteMessage := CommandCompleteMessage{
-		Type:   COMMAND_COMPLETE,
+		Type:   protocol.CommandComplete,
 		Length: int32(13),
 		Tag:    "DELETE 1",
+	}
+	test.AssertEquals(t, expectedCommandCompleteMessage, commandComplete)
+}
+
+func TestDecodeCommandCompleteMessageForBegin(t *testing.T) {
+	// given
+	var commandComplete CommandCompleteMessage
+	commandCompleteMessageHex := "430000000a424547494e00"
+	commandCompleteMessageDecoded, _ := hex.DecodeString(commandCompleteMessageHex)
+
+	// when
+	DecodeCommandCompleteMessage(commandCompleteMessageDecoded, &commandComplete)
+
+	// then
+	expectedCommandCompleteMessage := CommandCompleteMessage{
+		Type:   protocol.CommandComplete,
+		Length: int32(10),
+		Tag:    "BEGIN",
 	}
 	test.AssertEquals(t, expectedCommandCompleteMessage, commandComplete)
 }

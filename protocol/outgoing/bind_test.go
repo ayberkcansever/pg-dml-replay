@@ -1,6 +1,7 @@
-package protocol
+package outgoing
 
 import (
+	"com.canseverayberk/pg-dml-replay/protocol"
 	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
 	"testing"
@@ -17,7 +18,7 @@ func TestDecodeBindMessage(t *testing.T) {
 
 	// then
 	expectedBindMessage := BindMessage{
-		Type:               BIND,
+		Type:               protocol.Bind,
 		Length:             int32(12),
 		Portal:             "",
 		Statement:          "",
@@ -39,7 +40,7 @@ func TestDecodeBindMessageWithParameters1(t *testing.T) {
 
 	// then
 	expectedBindMessage := BindMessage{
-		Type:               BIND,
+		Type:               protocol.Bind,
 		Length:             int32(36),
 		Portal:             "",
 		Statement:          "",
@@ -61,7 +62,7 @@ func TestDecodeBindMessageWithParameters2(t *testing.T) {
 
 	// then
 	expectedBindMessage := BindMessage{
-		Type:             BIND,
+		Type:             protocol.Bind,
 		Length:           int32(92),
 		Portal:           "",
 		Statement:        "",

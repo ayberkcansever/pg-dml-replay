@@ -1,6 +1,7 @@
-package protocol
+package outgoing
 
 import (
+	"com.canseverayberk/pg-dml-replay/protocol"
 	"encoding/binary"
 )
 
@@ -28,7 +29,7 @@ func DecodeDescribeMessage(pgPacketData []byte, describeMessage *DescribeMessage
 	}
 	statement := string(pgPacketData[statementStartIndex : statementEndIndex-1])
 
-	describeMessage.Type = DESCRIBE
+	describeMessage.Type = protocol.Describe
 	describeMessage.Length = int32(messageLength)
 	describeMessage.Portal = describeType
 	describeMessage.Statement = statement

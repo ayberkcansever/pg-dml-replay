@@ -1,6 +1,7 @@
-package protocol
+package outgoing
 
 import (
+	"com.canseverayberk/pg-dml-replay/protocol"
 	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
 	"testing"
@@ -17,7 +18,7 @@ func TestDecodeParseMessageWithEmptyQuery(t *testing.T) {
 
 	// then
 	expectedParseMessage := ParseMessage{
-		Type:           PARSE,
+		Type:           protocol.Parse,
 		Length:         int32(12),
 		Statement:      "",
 		Query:          "",
@@ -37,7 +38,7 @@ func TestDecodeParseMessageWithBeginQuery(t *testing.T) {
 
 	// then
 	expectedParseMessage := ParseMessage{
-		Type:           PARSE,
+		Type:           protocol.Parse,
 		Length:         int32(13),
 		Statement:      "",
 		Query:          "BEGIN",
@@ -57,7 +58,7 @@ func TestDecodeParseMessageWithStatement(t *testing.T) {
 
 	// then
 	expectedParseMessage := ParseMessage{
-		Type:           PARSE,
+		Type:           protocol.Parse,
 		Length:         int32(11),
 		Statement:      "S_2",
 		Query:          "",
@@ -77,7 +78,7 @@ func TestDecodeParseMessageWithParameters(t *testing.T) {
 
 	// then
 	expectedParseMessage := ParseMessage{
-		Type:           PARSE,
+		Type:           protocol.Parse,
 		Length:         int32(56),
 		Statement:      "",
 		Query:          "UPDATE public.t1 SET b = $1 WHERE a = $2",

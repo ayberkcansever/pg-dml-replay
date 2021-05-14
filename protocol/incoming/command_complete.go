@@ -1,6 +1,10 @@
-package protocol
+package incoming
 
-import "encoding/binary"
+import (
+	"com.canseverayberk/pg-dml-replay/protocol"
+	"encoding/binary"
+	"strings"
+)
 
 type CommandCompleteMessage struct {
 	Type   byte
@@ -15,9 +19,13 @@ func DecodeCommandCompleteMessage(pgPacketData []byte, commandComplete *CommandC
 	tagEndIndex := messageLength
 	tag := string(pgPacketData[5:tagEndIndex])
 
-	commandComplete.Type = COMMAND_COMPLETE
+	commandComplete.Type = protocol.CommandComplete
 	commandComplete.Length = int32(messageLength)
 	commandComplete.Tag = tag
 
-	return lastIndex + int(tagEndIndex) + 2
+	return lastIndex + int(tagEndIndex) + 1
+}
+
+func (commandCompleteMessage CommandCompleteMessage) IsCommitMessage() bool {
+	return strings.HasPrefix(strings.ToLower(commandCompleteMessage.Tag), "commit")
 }

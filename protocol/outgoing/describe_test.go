@@ -1,6 +1,7 @@
-package protocol
+package outgoing
 
 import (
+	"com.canseverayberk/pg-dml-replay/protocol"
 	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
 	"testing"
@@ -17,7 +18,7 @@ func TestDecodeDescribeMessage(t *testing.T) {
 
 	// then
 	expectedDescribeMessage := DescribeMessage{
-		Type:   DESCRIBE,
+		Type:   protocol.Describe,
 		Length: int32(6),
 		Portal: "P",
 	}

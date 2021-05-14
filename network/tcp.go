@@ -4,25 +4,33 @@ import (
 	"com.canseverayberk/pg-dml-replay/db"
 	"com.canseverayberk/pg-dml-replay/kafka"
 	"com.canseverayberk/pg-dml-replay/protocol"
+	"com.canseverayberk/pg-dml-replay/protocol/incoming"
+	"com.canseverayberk/pg-dml-replay/protocol/outgoing"
 	"com.canseverayberk/pg-dml-replay/util"
 	"encoding/binary"
 	"fmt"
 	"github.com/enriquebris/goconcurrentqueue"
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"log"
+	"strconv"
+	"strings"
 )
 
-var preparedStatementMap = make(map[string]protocol.ParseMessage)
+var preparedStatementMap = make(map[string]outgoing.ParseMessage)
 var iface string
 var buffer = int32(32896)
 var filter string
 var tcpPacketChannel = make(chan gopacket.Packet)
 var messageQueue = goconcurrentqueue.NewFIFO()
+var port uint64
+var portTcpMessageQueueMap = make(map[string]*goconcurrentqueue.FIFO)
 
 func StartListeningPackets() {
 	iface = util.GetEnv("IFACE", "eth0")
-	filter = util.GetEnv("FILTER", "tcp and dst port 5000")
+	filter = util.GetEnv("FILTER", "tcp and port 5000")
+	port, _ = strconv.ParseUint(strings.Split(filter, "port ")[1], 10, 32)
 
 	if !deviceExists(iface) {
 		log.Fatal("Unable to open device ", iface)
@@ -54,17 +62,112 @@ func StartListeningPackets() {
 
 func startProcessingTcpPackets() {
 	packet := <-tcpPacketChannel
+	tcpLayer := packet.Layer(layers.LayerTypeTCP)
+	tcp, _ := tcpLayer.(*layers.TCP)
+	isOutgoingMessage := false
+	if tcp.DstPort == layers.TCPPort(uint16(port)) {
+		isOutgoingMessage = true
+	}
+
 	pgPacketData := packet.TransportLayer().LayerPayload()
 
 	messageType := pgPacketData[0]
-	if protocol.IsKnownOutgoingMessage(messageType) {
-		processMessage(pgPacketData)
+	if isOutgoingMessage && protocol.IsKnownOutgoingMessage(messageType) {
+		processOutgoingMessage(pgPacketData, tcp.SrcPort.String())
+	} else if protocol.IsKnownIncomingMessage(messageType) {
+		processIncomingMessage(pgPacketData, tcp.DstPort.String())
 	}
 
 	go startProcessingTcpPackets()
 }
 
-func processMessage(pgPacketData []byte) {
+func processIncomingMessage(pgPacketData []byte, dstPort string) {
+	var fullPacketData = make([]byte, 0)
+	lengthData := []byte{pgPacketData[1], pgPacketData[2], pgPacketData[3], pgPacketData[4]}
+	messageLength := int(binary.BigEndian.Uint32(lengthData))
+
+	if len(pgPacketData) > messageLength {
+		fullPacketData = append(fullPacketData, pgPacketData[0:(messageLength+1)]...)
+		successivePacketData := pgPacketData[(messageLength + 1):]
+		for {
+			if len(successivePacketData) == 0 {
+				break
+			}
+
+			lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
+			messageLength = int(binary.BigEndian.Uint32(lengthData))
+			if len(successivePacketData) > messageLength {
+				fullPacketData = append(fullPacketData, successivePacketData[0:(messageLength+1)]...)
+				successivePacketData = pgPacketData[len(fullPacketData):]
+			}
+			if messageLength > len(pgPacketData) {
+				fullPacketData = make([]byte, 0)
+				break
+			}
+		}
+	}
+	if len(pgPacketData) <= messageLength {
+		fullPacketData = append(fullPacketData, pgPacketData...)
+	}
+	for {
+		if len(fullPacketData) <= messageLength {
+			fullPacketData = append(fullPacketData, reassembly()...)
+		} else {
+			break
+		}
+	}
+
+	lastIndex := 0
+	for {
+		messageData := fullPacketData[lastIndex:]
+		messageType := messageData[0]
+
+		if messageType == protocol.ParseComplete {
+			var parseCompleteMessage incoming.ParseCompleteMessage
+			msgLastIndex := incoming.DecodeParseCompleteMessage(messageData, &parseCompleteMessage)
+			lastIndex += msgLastIndex
+		} else if messageType == protocol.BindComplete {
+			var bindCompleteMessage incoming.BindCompleteMessage
+			msgLastIndex := incoming.DecodeBindCompleteMessage(messageData, &bindCompleteMessage)
+			lastIndex += msgLastIndex
+		} else if messageType == protocol.CommandComplete {
+			var commandCompleteMessage incoming.CommandCompleteMessage
+			msgLastIndex := incoming.DecodeCommandCompleteMessage(messageData, &commandCompleteMessage)
+			lastIndex += msgLastIndex
+			fmt.Println("Command complete: ", commandCompleteMessage.Tag)
+			if commandCompleteMessage.IsCommitMessage() {
+				for {
+					dmlQuery, _ := portTcpMessageQueueMap[dstPort].Dequeue()
+					if dmlQuery == nil {
+						break
+					}
+					kafka.DmlKafKaMessageChannel <- dmlQuery.(db.DmlQuery)
+					fmt.Println("Queue size: ", dstPort, portTcpMessageQueueMap[dstPort].GetLen())
+				}
+			}
+		} else if messageType == protocol.EmptyQueryResponse {
+			var emptyQueryResponseMessage incoming.EmptyQueryResponseMessage
+			msgLastIndex := incoming.DecodeEmptyQueryResponse(messageData, &emptyQueryResponseMessage)
+			lastIndex += msgLastIndex
+		} else if messageType == protocol.NoData {
+			var noDataMessage incoming.NoDataMessage
+			msgLastIndex := incoming.DecodeNoDataMessage(messageData, &noDataMessage)
+			lastIndex += msgLastIndex
+		} else if messageType == protocol.ReadyForQuery {
+			var readyForQueryMessage incoming.ReadyForQueryMessage
+			msgLastIndex := incoming.DecodeReadyForQueryMessage(messageData, &readyForQueryMessage)
+			lastIndex += msgLastIndex
+		} else {
+			break
+		}
+
+		if lastIndex >= len(fullPacketData) {
+			break
+		}
+	}
+}
+
+func processOutgoingMessage(pgPacketData []byte, srcPort string) {
 	var fullPacketData = make([]byte, 0)
 	lengthData := []byte{pgPacketData[1], pgPacketData[2], pgPacketData[3], pgPacketData[4]}
 	messageLength := int(binary.BigEndian.Uint32(lengthData))
@@ -107,9 +210,9 @@ func processMessage(pgPacketData []byte) {
 		messageData := fullPacketData[lastIndex:]
 		messageType := messageData[0]
 
-		if messageType == protocol.PARSE {
-			var parseMessage protocol.ParseMessage
-			msgLastIndex := protocol.DecodeParseMessage(messageData, &parseMessage)
+		if messageType == protocol.Parse {
+			var parseMessage outgoing.ParseMessage
+			msgLastIndex := outgoing.DecodeParseMessage(messageData, &parseMessage)
 			_ = messageQueue.Enqueue(parseMessage)
 			if parseMessage.IsDMLQuery() && parseMessage.Statement != "" {
 				preparedStatementMap[parseMessage.Statement] = parseMessage
@@ -118,9 +221,9 @@ func processMessage(pgPacketData []byte) {
 			if parseMessage.Query != "" && parseMessage.IsDMLQuery() {
 				query = parseMessage.Query
 			}
-		} else if messageType == protocol.BIND {
-			var bindMessage protocol.BindMessage
-			messageLastIndex := protocol.DecodeBindMessage(messageData, &bindMessage)
+		} else if messageType == protocol.Bind {
+			var bindMessage outgoing.BindMessage
+			messageLastIndex := outgoing.DecodeBindMessage(messageData, &bindMessage)
 			_ = messageQueue.Enqueue(bindMessage)
 			if bindMessage.IsPreparedStatement() {
 				if parseMessage, ok := preparedStatementMap[bindMessage.Statement]; ok {
@@ -142,19 +245,19 @@ func processMessage(pgPacketData []byte) {
 					queryParameters[i] = queryParameter
 				}
 			}
-		} else if messageType == protocol.DESCRIBE {
-			var describeMessage protocol.DescribeMessage
-			messageLastIndex := protocol.DecodeDescribeMessage(messageData, &describeMessage)
+		} else if messageType == protocol.Describe {
+			var describeMessage outgoing.DescribeMessage
+			messageLastIndex := outgoing.DecodeDescribeMessage(messageData, &describeMessage)
 			_ = messageQueue.Enqueue(describeMessage)
 			lastIndex += messageLastIndex
-		} else if messageType == protocol.EXECUTE {
-			var executeMessage protocol.ExecuteMessage
-			messageLastIndex := protocol.DecodeExecuteMessage(messageData, &executeMessage)
+		} else if messageType == protocol.Execute {
+			var executeMessage outgoing.ExecuteMessage
+			messageLastIndex := outgoing.DecodeExecuteMessage(messageData, &executeMessage)
 			_ = messageQueue.Enqueue(executeMessage)
 			lastIndex += messageLastIndex
-		} else if messageType == protocol.SYNC {
-			var syncMessage protocol.SyncMessage
-			messageLastIndex := protocol.DecodeSyncMessage(messageData, &syncMessage)
+		} else if messageType == protocol.Sync {
+			var syncMessage outgoing.SyncMessage
+			messageLastIndex := outgoing.DecodeSyncMessage(messageData, &syncMessage)
 			_ = messageQueue.Enqueue(syncMessage)
 			lastIndex += messageLastIndex
 		} else {
@@ -163,10 +266,11 @@ func processMessage(pgPacketData []byte) {
 
 		if lastIndex >= len(fullPacketData) {
 			if query != "" {
-				kafka.DmlKafKaMessageChannel <- db.DmlQuery{
+				_ = getSrcPortQueue(srcPort).Enqueue(db.DmlQuery{
 					Query:      query,
 					Parameters: queryParameters,
-				}
+				})
+				fmt.Println("Queue size: ", srcPort, portTcpMessageQueueMap[srcPort].GetLen())
 			}
 			break
 		}
@@ -189,4 +293,13 @@ func deviceExists(name string) bool {
 		}
 	}
 	return false
+}
+
+func getSrcPortQueue(srcPort string) *goconcurrentqueue.FIFO {
+	queue := portTcpMessageQueueMap[srcPort]
+	if queue == nil {
+		queue = goconcurrentqueue.NewFIFO()
+		portTcpMessageQueueMap[srcPort] = queue
+	}
+	return queue
 }

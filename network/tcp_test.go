@@ -5,6 +5,7 @@ import (
 	"com.canseverayberk/pg-dml-replay/db"
 	"com.canseverayberk/pg-dml-replay/kafka"
 	"com.canseverayberk/pg-dml-replay/protocol"
+	"com.canseverayberk/pg-dml-replay/protocol/outgoing"
 	"com.canseverayberk/pg-dml-replay/test"
 	"encoding/hex"
 	"sync"
@@ -22,11 +23,11 @@ func TestProcessMessageBES(t *testing.T) {
 	packetDataBytes.Write(syncMessageBytes)
 
 	// when
-	processMessage(packetDataBytes.Bytes())
+	processOutgoingMessage(packetDataBytes.Bytes())
 
 	// then
-	expectedBindMessage := protocol.BindMessage{
-		Type:               protocol.BIND,
+	expectedBindMessage := outgoing.BindMessage{
+		Type:               protocol.Bind,
 		Length:             int32(15),
 		Portal:             "",
 		Statement:          "S_2",
@@ -34,14 +35,14 @@ func TestProcessMessageBES(t *testing.T) {
 		ParameterValues:    [][]byte{},
 		ResultFormatValues: []int16{},
 	}
-	expectedExecuteMessage := protocol.ExecuteMessage{
-		Type:             protocol.EXECUTE,
+	expectedExecuteMessage := outgoing.ExecuteMessage{
+		Type:             protocol.Execute,
 		Length:           int32(9),
 		Portal:           "",
 		RowCountToReturn: int32(1),
 	}
-	expectedSyncMessage := protocol.SyncMessage{
-		Type:   protocol.SYNC,
+	expectedSyncMessage := outgoing.SyncMessage{
+		Type:   protocol.Sync,
 		Length: int32(4),
 	}
 
@@ -70,18 +71,18 @@ func TestProcessMessagePBDES(t *testing.T) {
 	packetDataBytes.Write(syncMessageBytes)
 
 	// when
-	processMessage(packetDataBytes.Bytes())
+	processOutgoingMessage(packetDataBytes.Bytes())
 
 	// then
-	expectedParseMessage := protocol.ParseMessage{
-		Type:           protocol.PARSE,
+	expectedParseMessage := outgoing.ParseMessage{
+		Type:           protocol.Parse,
 		Length:         int32(40),
 		Statement:      "",
 		Query:          "SHOW TRANSACTION ISOLATION LEVEL",
 		ParameterTypes: []int32{},
 	}
-	expectedBindMessage := protocol.BindMessage{
-		Type:               protocol.BIND,
+	expectedBindMessage := outgoing.BindMessage{
+		Type:               protocol.Bind,
 		Length:             int32(12),
 		Portal:             "",
 		Statement:          "",
@@ -89,19 +90,19 @@ func TestProcessMessagePBDES(t *testing.T) {
 		ParameterValues:    [][]byte{},
 		ResultFormatValues: []int16{},
 	}
-	expectedDescribeMessage := protocol.DescribeMessage{
-		Type:   protocol.DESCRIBE,
+	expectedDescribeMessage := outgoing.DescribeMessage{
+		Type:   protocol.Describe,
 		Length: int32(6),
 		Portal: "P",
 	}
-	expectedExecuteMessage := protocol.ExecuteMessage{
-		Type:             protocol.EXECUTE,
+	expectedExecuteMessage := outgoing.ExecuteMessage{
+		Type:             protocol.Execute,
 		Length:           int32(9),
 		Portal:           "",
 		RowCountToReturn: int32(1),
 	}
-	expectedSyncMessage := protocol.SyncMessage{
-		Type:   protocol.SYNC,
+	expectedSyncMessage := outgoing.SyncMessage{
+		Type:   protocol.Sync,
 		Length: int32(4),
 	}
 
@@ -164,18 +165,18 @@ func TestProcessMessagePBEPBDES(t *testing.T) {
 	packetDataBytes.Write(syncMessageBytes)
 
 	// when
-	processMessage(packetDataBytes.Bytes())
+	processOutgoingMessage(packetDataBytes.Bytes())
 
 	// then
-	expectedParseMessage1 := protocol.ParseMessage{
-		Type:           protocol.PARSE,
+	expectedParseMessage1 := outgoing.ParseMessage{
+		Type:           protocol.Parse,
 		Length:         int32(13),
 		Statement:      "",
 		Query:          "BEGIN",
 		ParameterTypes: []int32{},
 	}
-	expectedBindMessage1 := protocol.BindMessage{
-		Type:               protocol.BIND,
+	expectedBindMessage1 := outgoing.BindMessage{
+		Type:               protocol.Bind,
 		Length:             int32(12),
 		Portal:             "",
 		Statement:          "",
@@ -183,21 +184,21 @@ func TestProcessMessagePBEPBDES(t *testing.T) {
 		ParameterValues:    [][]byte{},
 		ResultFormatValues: []int16{},
 	}
-	expectedExecuteMessage1 := protocol.ExecuteMessage{
-		Type:             protocol.EXECUTE,
+	expectedExecuteMessage1 := outgoing.ExecuteMessage{
+		Type:             protocol.Execute,
 		Length:           int32(9),
 		Portal:           "",
 		RowCountToReturn: int32(0),
 	}
-	expectedParseMessage2 := protocol.ParseMessage{
-		Type:           protocol.PARSE,
+	expectedParseMessage2 := outgoing.ParseMessage{
+		Type:           protocol.Parse,
 		Length:         int32(56),
 		Statement:      "",
 		Query:          "UPDATE public.t2 SET c = $1 WHERE a = $2",
 		ParameterTypes: []int32{1043, 23},
 	}
-	expectedBindMessage2 := protocol.BindMessage{
-		Type:             protocol.BIND,
+	expectedBindMessage2 := outgoing.BindMessage{
+		Type:             protocol.Bind,
 		Length:           int32(36),
 		Portal:           "",
 		Statement:        "",
@@ -208,19 +209,19 @@ func TestProcessMessagePBEPBDES(t *testing.T) {
 		},
 		ResultFormatValues: []int16{},
 	}
-	expectedDescribeMessage := protocol.DescribeMessage{
-		Type:   protocol.DESCRIBE,
+	expectedDescribeMessage := outgoing.DescribeMessage{
+		Type:   protocol.Describe,
 		Length: int32(6),
 		Portal: "P",
 	}
-	expectedExecuteMessage2 := protocol.ExecuteMessage{
-		Type:             protocol.EXECUTE,
+	expectedExecuteMessage2 := outgoing.ExecuteMessage{
+		Type:             protocol.Execute,
 		Length:           int32(9),
 		Portal:           "",
 		RowCountToReturn: int32(1),
 	}
-	expectedSyncMessage := protocol.SyncMessage{
-		Type:   protocol.SYNC,
+	expectedSyncMessage := outgoing.SyncMessage{
+		Type:   protocol.Sync,
 		Length: int32(4),
 	}
 
