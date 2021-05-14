@@ -57,7 +57,7 @@ func startProcessingTcpPackets() {
 	pgPacketData := packet.TransportLayer().LayerPayload()
 
 	messageType := pgPacketData[0]
-	if protocol.IsKnownMessage(messageType) {
+	if protocol.IsKnownOutgoingMessage(messageType) {
 		processMessage(pgPacketData)
 	}
 
