@@ -23,7 +23,7 @@ func TestProcessMessageBES(t *testing.T) {
 	packetDataBytes.Write(syncMessageBytes)
 
 	// when
-	processOutgoingMessage(packetDataBytes.Bytes())
+	processOutgoingMessage(packetDataBytes.Bytes(), "5432")
 
 	// then
 	expectedBindMessage := outgoing.BindMessage{
@@ -71,7 +71,7 @@ func TestProcessMessagePBDES(t *testing.T) {
 	packetDataBytes.Write(syncMessageBytes)
 
 	// when
-	processOutgoingMessage(packetDataBytes.Bytes())
+	processOutgoingMessage(packetDataBytes.Bytes(), "5432")
 
 	// then
 	expectedParseMessage := outgoing.ParseMessage{
@@ -165,7 +165,7 @@ func TestProcessMessagePBEPBDES(t *testing.T) {
 	packetDataBytes.Write(syncMessageBytes)
 
 	// when
-	processOutgoingMessage(packetDataBytes.Bytes())
+	processOutgoingMessage(packetDataBytes.Bytes(), "5432")
 
 	// then
 	expectedParseMessage1 := outgoing.ParseMessage{

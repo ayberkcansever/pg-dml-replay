@@ -1,8 +1,8 @@
 package protocol
 
 const (
-	BindComplete       = 49
-	ParseComplete      = 50
+	ParseComplete      = 49
+	BindComplete       = 50
 	Bind               = 66
 	CommandComplete    = 67
 	Describe           = 68
