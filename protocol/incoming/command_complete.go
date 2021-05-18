@@ -27,5 +27,8 @@ func DecodeCommandCompleteMessage(pgPacketData []byte, commandComplete *CommandC
 }
 
 func (commandCompleteMessage CommandCompleteMessage) IsCommitMessage() bool {
-	return strings.HasPrefix(strings.ToLower(commandCompleteMessage.Tag), "commit")
+	return strings.HasPrefix(strings.ToLower(commandCompleteMessage.Tag), "commit") ||
+		strings.HasPrefix(strings.ToLower(commandCompleteMessage.Tag), "insert") ||
+		strings.HasPrefix(strings.ToLower(commandCompleteMessage.Tag), "update") ||
+		strings.HasPrefix(strings.ToLower(commandCompleteMessage.Tag), "delete")
 }
