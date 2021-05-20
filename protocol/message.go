@@ -5,6 +5,7 @@ const (
 	BindComplete       = 50
 	Bind               = 66
 	CommandComplete    = 67
+	DataRow            = 68
 	Describe           = 68
 	Execute            = 69
 	EmptyQueryResponse = 73
@@ -22,5 +23,6 @@ func IsKnownOutgoingMessage(messageType byte) bool {
 func IsKnownIncomingMessage(messageType byte) bool {
 	return messageType == BindComplete || messageType == ParseComplete ||
 		messageType == CommandComplete || messageType == NoData ||
-		messageType == EmptyQueryResponse || messageType == ReadyForQuery
+		messageType == EmptyQueryResponse || messageType == ReadyForQuery ||
+		messageType == DataRow
 }

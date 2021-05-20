@@ -96,22 +96,25 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 				break
 			}
 
-			if len(successivePacketData) < 4 {
+			if len(successivePacketData) < 5 {
 				successivePacketData = append(successivePacketData, reassembly()...)
 				break processIndividualPgPacket
 			}
 			lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
 			messageLength := int(binary.BigEndian.Uint32(lengthData))
 			for {
-				if len(successivePacketData) <= messageLength {
+				if len(successivePacketData) < messageLength {
 					break
+				}
+				if len(successivePacketData) == messageLength {
+					break processIndividualPgPacket
 				}
 				fullPacketData = append(fullPacketData, successivePacketData[0:(messageLength+1)]...)
 				successivePacketData = pgPacketData[len(fullPacketData):]
 				if len(successivePacketData) == 0 {
 					break processIndividualPgPacket
 				}
-				if len(successivePacketData) < 4 {
+				if len(successivePacketData) < 5 {
 					successivePacketData = append(successivePacketData, reassembly()...)
 					break processIndividualPgPacket
 				}
@@ -191,6 +194,11 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 			msgLastIndex := incoming.DecodeReadyForQueryMessage(messageData, &readyForQueryMessage)
 			lastIndex += msgLastIndex
 			fmt.Println("<------ReadyForQuery")
+		} else if messageType == protocol.DataRow {
+			var dataRowMessage incoming.DataRowMessage
+			msgLastIndex := incoming.DecodeDataRowMessage(messageData, &dataRowMessage)
+			lastIndex += msgLastIndex
+			fmt.Println("<------DataRow")
 		} else {
 			break
 		}
@@ -220,22 +228,25 @@ func processOutgoingMessage(pgPacketData []byte, srcPort string) {
 				break
 			}
 
-			if len(successivePacketData) < 4 {
+			if len(successivePacketData) < 5 {
 				successivePacketData = append(successivePacketData, reassembly()...)
 				break processIndividualPgPacket
 			}
 			lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
 			messageLength := int(binary.BigEndian.Uint32(lengthData))
 			for {
-				if len(successivePacketData) <= messageLength {
+				if len(successivePacketData) < messageLength {
 					break
+				}
+				if len(successivePacketData) == messageLength {
+					break processIndividualPgPacket
 				}
 				fullPacketData = append(fullPacketData, successivePacketData[0:(messageLength+1)]...)
 				successivePacketData = pgPacketData[len(fullPacketData):]
 				if len(successivePacketData) == 0 {
 					break processIndividualPgPacket
 				}
-				if len(successivePacketData) < 4 {
+				if len(successivePacketData) < 5 {
 					successivePacketData = append(successivePacketData, reassembly()...)
 					break processIndividualPgPacket
 				}

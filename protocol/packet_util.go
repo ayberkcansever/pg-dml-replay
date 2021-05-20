@@ -36,16 +36,20 @@ func ReadInt16Array(packetData []byte, startIndex int, length int) ([]int16, int
 	return parameterFormats, startIndex
 }
 
-func ReadInt32(packetData []byte, startIndex int) (uint32, int) {
+func ReadInt32(packetData []byte, startIndex int) (int32, int) {
 	endIndex := startIndex + 4
-	return binary.BigEndian.Uint32(packetData[startIndex:endIndex]), endIndex
+	valueBytes := packetData[startIndex:endIndex]
+	if valueBytes[0] == 255 && valueBytes[1] == 255 && valueBytes[2] == 255 && valueBytes[3] == 255 {
+		return -1, endIndex
+	}
+	return int32(binary.BigEndian.Uint32(valueBytes)), endIndex
 }
 
 func ReadInt32Array(packetData []byte, startIndex int, length int) ([]int32, int) {
 	parameterFormats := make([]int32, length)
 	for i := 0; i < length; i++ {
 		value, lastIndex := ReadInt32(packetData, startIndex)
-		parameterFormats[i] = int32(value)
+		parameterFormats[i] = value
 		startIndex = lastIndex
 	}
 	return parameterFormats, startIndex
