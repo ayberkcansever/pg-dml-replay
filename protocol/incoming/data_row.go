@@ -3,7 +3,6 @@ package incoming
 import (
 	"com.canseverayberk/pg-dml-replay/protocol"
 	"encoding/binary"
-	"fmt"
 )
 
 type DataRowMessage struct {
@@ -33,9 +32,6 @@ func DecodeDataRowMessage(pgPacketData []byte, dataRowMessage *DataRowMessage) (
 			columnValues[i] = nil
 			lastEndIndex = endIndex
 			continue
-		}
-		if columnLength > 100000 {
-			fmt.Println("aaaaa")
 		}
 		columnValue := pgPacketData[endIndex:(endIndex + int(columnLength))]
 		columnLengths[i] = columnLength

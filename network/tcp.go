@@ -22,7 +22,8 @@ var preparedStatementMap = make(map[string]outgoing.ParseMessage)
 var iface string
 var buffer = int32(32896)
 var filter string
-var tcpPacketChannel = make(chan gopacket.Packet)
+var tcpOutgoingPacketChannel = make(chan gopacket.Packet, 1)
+var tcpIncomingPacketChannel = make(chan gopacket.Packet, 1)
 var messageQueue = goconcurrentqueue.NewFIFO()
 var port uint64
 var portTcpMessageQueueMap = make(map[string]*goconcurrentqueue.FIFO)
@@ -47,44 +48,56 @@ func StartListeningPackets() {
 		log.Fatal(err)
 	}
 
-	go startProcessingTcpPackets()
+	go startProcessingOutgoingTcpPackets()
+	go startProcessingIncomingTcpPackets()
 
 	source := gopacket.NewPacketSource(handler, handler.LinkType())
-	source.DecodeStreamsAsDatagrams = true
 
 	for packet := range source.Packets() {
 		pgPacketData := packet.TransportLayer().LayerPayload()
 		if len(pgPacketData) > 0 {
-			tcpPacketChannel <- packet
+			tcpLayer := packet.Layer(layers.LayerTypeTCP)
+			tcp, _ := tcpLayer.(*layers.TCP)
+			if tcp.DstPort == layers.TCPPort(uint16(port)) {
+				tcpOutgoingPacketChannel <- packet
+			} else {
+				tcpIncomingPacketChannel <- packet
+			}
 		}
 	}
 }
 
-func startProcessingTcpPackets() {
-	packet := <-tcpPacketChannel
+func startProcessingIncomingTcpPackets() {
+	packet := <-tcpIncomingPacketChannel
 	tcpLayer := packet.Layer(layers.LayerTypeTCP)
 	tcp, _ := tcpLayer.(*layers.TCP)
-	isOutgoingMessage := false
-	if tcp.DstPort == layers.TCPPort(uint16(port)) {
-		isOutgoingMessage = true
-	}
-
 	pgPacketData := packet.TransportLayer().LayerPayload()
 
 	messageType := pgPacketData[0]
-	if isOutgoingMessage && protocol.IsKnownOutgoingMessage(messageType) {
-		processOutgoingMessage(pgPacketData, tcp.SrcPort.String())
-	} else if protocol.IsKnownIncomingMessage(messageType) {
+	if protocol.IsKnownIncomingMessage(messageType) {
 		processIncomingMessage(pgPacketData, tcp.DstPort.String())
 	}
+	startProcessingIncomingTcpPackets()
+}
 
-	go startProcessingTcpPackets()
+func startProcessingOutgoingTcpPackets() {
+	packet := <-tcpOutgoingPacketChannel
+	tcpLayer := packet.Layer(layers.LayerTypeTCP)
+	tcp, _ := tcpLayer.(*layers.TCP)
+	pgPacketData := packet.TransportLayer().LayerPayload()
+
+	messageType := pgPacketData[0]
+	if protocol.IsKnownOutgoingMessage(messageType) {
+		processOutgoingMessage(pgPacketData, tcp.SrcPort.String())
+	}
+	startProcessingOutgoingTcpPackets()
 }
 
 func processIncomingMessage(pgPacketData []byte, dstPort string) {
 	var fullPacketData = make([]byte, 0)
 	lengthData := []byte{pgPacketData[1], pgPacketData[2], pgPacketData[3], pgPacketData[4]}
 	messageLength := int(binary.BigEndian.Uint32(lengthData))
+	fmt.Println(messageLength)
 	successivePacketData := make([]byte, 0)
 
 	if len(pgPacketData) > messageLength {
@@ -97,7 +110,7 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 			}
 
 			if len(successivePacketData) < 5 {
-				successivePacketData = append(successivePacketData, reassembly()...)
+				successivePacketData = append(successivePacketData, reassemblyIncoming()...)
 				break processIndividualPgPacket
 			}
 			lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
@@ -115,7 +128,7 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 					break processIndividualPgPacket
 				}
 				if len(successivePacketData) < 5 {
-					successivePacketData = append(successivePacketData, reassembly()...)
+					successivePacketData = append(successivePacketData, reassemblyIncoming()...)
 					break processIndividualPgPacket
 				}
 				lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
@@ -123,7 +136,7 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 			}
 
 			if len(successivePacketData) > 0 && messageLength > len(successivePacketData) {
-				successivePacketData = append(successivePacketData, reassembly()...)
+				successivePacketData = append(successivePacketData, reassemblyIncoming()...)
 				break processIndividualPgPacket
 			}
 		}
@@ -134,7 +147,7 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 		for {
 			if len(fullPacketData) < messageLength+1 {
 				successivePacketData = fullPacketData
-				successivePacketData = append(successivePacketData, reassembly()...)
+				successivePacketData = append(successivePacketData, reassemblyIncoming()...)
 				lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
 				messageLength = int(binary.BigEndian.Uint32(lengthData))
 				if len(successivePacketData) < messageLength {
@@ -150,9 +163,12 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 	}
 
 	lastIndex := 0
+	fmt.Println(fullPacketData)
 	for {
 		messageData := fullPacketData[lastIndex:]
 		messageType := messageData[0]
+		lengthData = []byte{messageData[1], messageData[2], messageData[3], messageData[4]}
+		messageLength = int(binary.BigEndian.Uint32(lengthData))
 
 		if messageType == protocol.ParseComplete {
 			var parseCompleteMessage incoming.ParseCompleteMessage
@@ -229,7 +245,7 @@ func processOutgoingMessage(pgPacketData []byte, srcPort string) {
 			}
 
 			if len(successivePacketData) < 5 {
-				successivePacketData = append(successivePacketData, reassembly()...)
+				successivePacketData = append(successivePacketData, reassemblyOutgoing()...)
 				break processIndividualPgPacket
 			}
 			lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
@@ -247,7 +263,7 @@ func processOutgoingMessage(pgPacketData []byte, srcPort string) {
 					break processIndividualPgPacket
 				}
 				if len(successivePacketData) < 5 {
-					successivePacketData = append(successivePacketData, reassembly()...)
+					successivePacketData = append(successivePacketData, reassemblyOutgoing()...)
 					break processIndividualPgPacket
 				}
 				lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
@@ -255,7 +271,7 @@ func processOutgoingMessage(pgPacketData []byte, srcPort string) {
 			}
 
 			if len(successivePacketData) > 0 && messageLength > len(successivePacketData) {
-				successivePacketData = append(successivePacketData, reassembly()...)
+				successivePacketData = append(successivePacketData, reassemblyOutgoing()...)
 				break
 			}
 		}
@@ -266,7 +282,7 @@ func processOutgoingMessage(pgPacketData []byte, srcPort string) {
 		for {
 			if len(fullPacketData) < messageLength+1 {
 				successivePacketData = fullPacketData
-				successivePacketData = append(successivePacketData, reassembly()...)
+				successivePacketData = append(successivePacketData, reassemblyOutgoing()...)
 				lengthData = []byte{successivePacketData[1], successivePacketData[2], successivePacketData[3], successivePacketData[4]}
 				messageLength = int(binary.BigEndian.Uint32(lengthData))
 				if len(successivePacketData) < messageLength {
@@ -364,8 +380,13 @@ func processOutgoingMessage(pgPacketData []byte, srcPort string) {
 	}
 }
 
-func reassembly() []byte {
-	packet := <-tcpPacketChannel
+func reassemblyIncoming() []byte {
+	packet := <-tcpIncomingPacketChannel
+	return packet.TransportLayer().LayerPayload()
+}
+
+func reassemblyOutgoing() []byte {
+	packet := <-tcpOutgoingPacketChannel
 	return packet.TransportLayer().LayerPayload()
 }
 
