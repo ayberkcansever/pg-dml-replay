@@ -22,8 +22,8 @@ var preparedStatementMap = make(map[string]outgoing.ParseMessage)
 var iface string
 var buffer = int32(32896)
 var filter string
-var tcpOutgoingPacketChannel = make(chan gopacket.Packet, 1)
-var tcpIncomingPacketChannel = make(chan gopacket.Packet, 1)
+var tcpOutgoingPacketChannel = make(chan gopacket.Packet)
+var tcpIncomingPacketChannel = make(chan gopacket.Packet)
 var messageQueue = goconcurrentqueue.NewFIFO()
 var port uint64
 var portTcpMessageQueueMap = make(map[string]*goconcurrentqueue.FIFO)
@@ -52,6 +52,9 @@ func StartListeningPackets() {
 	go startProcessingIncomingTcpPackets()
 
 	source := gopacket.NewPacketSource(handler, handler.LinkType())
+	source.DecodeOptions.Lazy = true
+	source.NoCopy = true
+	source.DecodeStreamsAsDatagrams = true
 
 	for packet := range source.Packets() {
 		pgPacketData := packet.TransportLayer().LayerPayload()
@@ -59,7 +62,7 @@ func StartListeningPackets() {
 			tcpLayer := packet.Layer(layers.LayerTypeTCP)
 			tcp, _ := tcpLayer.(*layers.TCP)
 			if tcp.DstPort == layers.TCPPort(uint16(port)) {
-				tcpOutgoingPacketChannel <- packet
+				//tcpOutgoingPacketChannel <- packet
 			} else {
 				tcpIncomingPacketChannel <- packet
 			}
@@ -97,7 +100,6 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 	var fullPacketData = make([]byte, 0)
 	lengthData := []byte{pgPacketData[1], pgPacketData[2], pgPacketData[3], pgPacketData[4]}
 	messageLength := int(binary.BigEndian.Uint32(lengthData))
-	fmt.Println(messageLength)
 	successivePacketData := make([]byte, 0)
 
 	if len(pgPacketData) > messageLength {
@@ -163,7 +165,6 @@ func processIncomingMessage(pgPacketData []byte, dstPort string) {
 	}
 
 	lastIndex := 0
-	fmt.Println(fullPacketData)
 	for {
 		messageData := fullPacketData[lastIndex:]
 		messageType := messageData[0]
