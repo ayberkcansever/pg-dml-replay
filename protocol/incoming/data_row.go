@@ -33,6 +33,11 @@ func DecodeDataRowMessage(pgPacketData []byte, dataRowMessage *DataRowMessage) (
 			lastEndIndex = endIndex
 			continue
 		}
+		/*		if columnLength > 100000 {
+				fmt.Println("++++++++++++++++++++++++++++++++++")
+				fmt.Println(pgPacketData)
+				fmt.Println("++++++++++++++++++++++++++++++++++")
+			}*/
 		columnValue := pgPacketData[endIndex:(endIndex + int(columnLength))]
 		columnLengths[i] = columnLength
 		columnValues[i] = columnValue

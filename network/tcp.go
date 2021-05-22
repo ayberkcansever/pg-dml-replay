@@ -20,13 +20,14 @@ import (
 
 var preparedStatementMap = make(map[string]outgoing.ParseMessage)
 var iface string
-var buffer = int32(32896)
+var buffer = int32(262144)
 var filter string
 var tcpOutgoingPacketChannel = make(chan gopacket.Packet)
 var tcpIncomingPacketChannel = make(chan gopacket.Packet)
 var messageQueue = goconcurrentqueue.NewFIFO()
 var port uint64
 var portTcpMessageQueueMap = make(map[string]*goconcurrentqueue.FIFO)
+var portIncomingSeqMap = make(map[string]uint32)
 
 func StartListeningPackets() {
 	iface = util.GetEnv("IFACE", "eth0")
@@ -62,9 +63,12 @@ func StartListeningPackets() {
 			tcpLayer := packet.Layer(layers.LayerTypeTCP)
 			tcp, _ := tcpLayer.(*layers.TCP)
 			if tcp.DstPort == layers.TCPPort(uint16(port)) {
-				//tcpOutgoingPacketChannel <- packet
+				tcpOutgoingPacketChannel <- packet
 			} else {
-				tcpIncomingPacketChannel <- packet
+				if tcp.Seq > portIncomingSeqMap[tcp.DstPort.String()] {
+					portIncomingSeqMap[tcp.DstPort.String()] = tcp.Seq
+					tcpIncomingPacketChannel <- packet
+				}
 			}
 		}
 	}
